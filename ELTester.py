@@ -115,6 +115,7 @@ def convert_to_excel(data_list, file_path="Sales_Report.xlsx"):
     df = df[front + working + end_cols]
 
     output_path = Path(file_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
     df.to_excel(output_path, index=False)
     return output_path, df
 
