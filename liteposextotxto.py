@@ -2,6 +2,7 @@
 Convert Sales Summary Report Excel files to Sales Transaction Summary text format.
 """
 
+import io
 import os
 import re
 import sys
@@ -809,10 +810,7 @@ def build_text_to_excel():
             st.warning("Please upload one or more text files before converting.")
             return
 
-        temp_folder = Path(tempfile.gettempdir()) / "sales_converter"
-        temp_folder.mkdir(exist_ok=True, parents=True)
         output_name = "Sales_Report.xlsx"
-        output_path_full = temp_folder / output_name
 
         with st.spinner("Extracting sales data and building Excel file..."):
             try:
@@ -821,10 +819,34 @@ def build_text_to_excel():
                     st.error("No valid sales data could be extracted from the uploaded files.")
                     return
 
-                output_path, df = convert_to_excel(data_list, str(output_path_full))
+                df = pd.DataFrame(data_list)
+                if "POS SALES" in df.columns:
+                    df = df.drop(columns=["POS SALES"])
 
-                with open(output_path, "rb") as file_data:
-                    excel_bytes = file_data.read()
+                if "TENDER TYPE SALES" not in df.columns:
+                    df["TENDER TYPE SALES"] = 0
+                else:
+                    df["TENDER TYPE SALES"] = df["TENDER TYPE SALES"].fillna(0)
+
+                if "CORP CODE SALES" not in df.columns:
+                    df["CORP CODE SALES"] = 0
+                else:
+                    df["CORP CODE SALES"] = df["CORP CODE SALES"].fillna(0)
+
+                cols = list(df.columns)
+                front = [c for c in ["Shop id", "Shop Name"] if c in cols]
+                working = [c for c in cols if c not in front]
+                for end_col in ["TENDER TYPE SALES", "CORP CODE SALES"]:
+                    if end_col in working:
+                        working.remove(end_col)
+                end_cols = [c for c in ["TENDER TYPE SALES", "CORP CODE SALES"] if c in df.columns]
+                df = df[front + working + end_cols]
+
+                buffer = io.BytesIO()
+                with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+                    df.to_excel(writer, index=False)
+                buffer.seek(0)
+                excel_bytes = buffer.getvalue()
 
                 st.success("Excel file generated successfully.")
                 st.download_button(
