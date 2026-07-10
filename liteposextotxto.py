@@ -8,6 +8,7 @@ import re
 import sys
 import tempfile
 import time
+import zipfile
 from datetime import datetime
 from pathlib import Path
 
@@ -888,6 +889,9 @@ def build_excel_to_txt():
             st.warning("Please upload one or more Excel files first.")
             return
 
+        temp_folder = Path(tempfile.gettempdir()) / "sales_converter_txt"
+        temp_folder.mkdir(parents=True, exist_ok=True)
+
         output_files = []
 
         with st.spinner(f"Converting {len(uploaded_excel_files)} file(s) to TXT..."):
@@ -899,12 +903,13 @@ def build_excel_to_txt():
                 try:
                     base_name = Path(uploaded_excel.name).stem
                     output_name = f"{base_name}.txt"
+                    output_path = temp_folder / output_name
 
                     with tempfile.NamedTemporaryFile(delete=False, suffix=Path(uploaded_excel.name).suffix) as tmp:
                         tmp.write(uploaded_excel.getvalue())
                         temp_excel_path = Path(tmp.name)
 
-                    saved_path, report_text = excel_to_text(temp_excel_path, output_name)
+                    saved_path, report_text = excel_to_text(temp_excel_path, output_path)
                     output_files.append((output_name, report_text))
                     success_count += 1
 
@@ -925,19 +930,22 @@ def build_excel_to_txt():
                 for error in error_messages:
                     st.error(error)
 
+        zip_buffer = io.BytesIO()
+        with zipfile.ZipFile(zip_buffer, mode="w", compression=zipfile.ZIP_DEFLATED) as archive:
+            for output_name, report_text in output_files:
+                archive.writestr(output_name, report_text.encode("utf-8"))
+        zip_buffer.seek(0)
+
+        st.download_button(
+            label="Download All TXT Outputs",
+            data=zip_buffer.getvalue(),
+            file_name="excel_to_txt_outputs.zip",
+            mime="application/zip",
+        )
+
         with st.expander("View output files"):
             for output_name, report_text in output_files:
                 st.write(f"✅ {output_name}")
-                try:
-                    file_bytes = report_text.encode("utf-8")
-                    st.download_button(
-                        label=f"Download {output_name}",
-                        data=file_bytes,
-                        file_name=output_name,
-                        mime="text/plain",
-                    )
-                except Exception as exc:
-                    st.error(f"Could not prepare download for {output_name}: {exc}")
 
         with st.expander("Preview first file"):
             if output_files:
